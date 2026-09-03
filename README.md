@@ -1,6 +1,6 @@
 # Dispatch — Full-Stack Task Management Application
 
-A clean, full-stack task management application with a **React** frontend and a **Node.js/Express** REST API backend using **file-based JSON persistent storage** (zero database setup required).
+A full-stack task management application with a **React** frontend, **Node.js/Express** REST API backend, and **MongoDB** database integration.
 
 ## Features
 
@@ -15,13 +15,14 @@ A clean, full-stack task management application with a **React** frontend and a 
 ## Tech Stack
 
 - **Frontend**: React 18, Vite, React Router v6, Axios, Lucide React.
-- **Backend**: Node.js, Express.js, JSON File Storage, JSON Web Tokens (JWT), Bcrypt.js, Morgan, Express Rate Limit.
+- **Backend**: Node.js, Express.js, Mongoose (MongoDB), JSON Web Tokens (JWT), Bcrypt.js, Morgan, Express Rate Limit.
 
 ## Getting Started
 
 ### Prerequisites
 
 - Node.js (v18+)
+- MongoDB running locally or a remote MongoDB Atlas URI.
 
 ### Local Environment Setup
 
@@ -30,6 +31,7 @@ Create `.env` in the root directory (or copy from `.env.example`):
 ```env
 PORT=3001
 NODE_ENV=development
+MONGODB_URI=mongodb://localhost:27017/task-manager
 JWT_SECRET=your-super-secret-key
 JWT_EXPIRE=7d
 CORS_ORIGIN=http://localhost:5173,http://localhost:3000
@@ -41,7 +43,7 @@ VITE_API_URL=http://localhost:3001/api
 ```bash
 cd backend
 npm install
-npm run seed  # Seeds initial users, tasks, projects, and teams into backend/data/
+npm run seed  # Seeds initial users, tasks, projects, and teams
 npm run dev   # Starts Express API server on http://localhost:3001
 ```
 
@@ -64,7 +66,7 @@ npm run build
 
 ## Render Deployment Instructions
 
-You can deploy both the Backend Web Service and Frontend Static Site on Render without needing external database services.
+You can deploy both the Backend Web Service and Frontend Static Site on Render using the instructions below.
 
 ### 1. Deploy Backend Web Service on Render
 
@@ -77,6 +79,7 @@ You can deploy both the Backend Web Service and Frontend Static Site on Render w
    - **Build Command**: `npm install`
    - **Start Command**: `npm start`
 4. Add the required Environment Variables in Render:
+   - `MONGODB_URI`: Your MongoDB Atlas connection URI (e.g. `mongodb+srv://<user>:<password>@cluster.mongodb.net/task-manager`)
    - `JWT_SECRET`: A secure random secret string
    - `JWT_EXPIRE`: `7d`
    - `NODE_ENV`: `production`
