@@ -1,37 +1,28 @@
-import mongoose from 'mongoose';
-import dotenv from 'dotenv';
-import User from '../models/User.js';
-import Task from '../models/Task.js';
-import Project from '../models/Project.js';
-import Team from '../models/Team.js';
-
-dotenv.config();
+import bcrypt from 'bcryptjs';
+import { db } from '../db.js';
 
 const seed = async () => {
   try {
-    await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/task-manager');
-    console.log('Connected to MongoDB for seeding...');
+    console.log('Seeding JSON file database...');
 
-    await User.deleteMany({});
-    await Task.deleteMany({});
-    await Project.deleteMany({});
-    await Team.deleteMany({});
+    db.clearAll();
 
-    console.log('Cleared existing data.');
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash('password123', salt);
 
-    const user1 = await User.create({
+    const user1 = db.createUser({
       name: 'Alex Johnson',
       email: 'alex@example.com',
-      password: 'password123',
+      password: hashedPassword,
       role: 'admin',
       bio: 'Engineering Lead & Project Manager',
       department: 'Engineering',
     });
 
-    const user2 = await User.create({
+    const user2 = db.createUser({
       name: 'Sarah Smith',
       email: 'sarah@example.com',
-      password: 'password123',
+      password: hashedPassword,
       role: 'developer',
       bio: 'Full Stack Developer',
       department: 'Engineering',
@@ -39,50 +30,48 @@ const seed = async () => {
 
     console.log('Created seed users.');
 
-    const project1 = await Project.create({
+    const project1 = db.createProject({
       name: 'Website Redesign',
       description: 'Overhaul corporate website with modern React frontend',
+      startDate: new Date().toISOString().slice(0, 10),
+      dueDate: new Date(Date.now() + 86400000 * 30).toISOString().slice(0, 10),
+      owner: user1.id,
+    });
+
+    db.updateProject(project1.id, {
+      teamMembers: [user1.id, user2.id],
       status: 'active',
       progress: 50,
-      owner: user1._id,
-      teamMembers: [user1._id, user2._id],
     });
 
     console.log('Created seed project.');
 
-    const task1 = await Task.create({
+    db.createTask({
       title: 'Design Wireframes',
       description: 'Create responsive wireframes for dashboard and task board',
-      status: 'completed',
       priority: 'high',
-      dueDate: new Date(Date.now() + 86400000 * 3),
-      creator: user1._id,
-      assignee: user2._id,
-      project: project1._id,
+      dueDate: new Date(Date.now() + 86400000 * 3).toISOString().slice(0, 10),
+      creator: user1.id,
+      assignee: user2.id,
+      project: project1.id,
     });
 
-    const task2 = await Task.create({
+    db.createTask({
       title: 'Build REST API',
       description: 'Implement Express routes for tasks, projects, users, and teams',
-      status: 'in_progress',
       priority: 'urgent',
-      dueDate: new Date(Date.now() + 86400000 * 5),
-      creator: user1._id,
-      assignee: user1._id,
-      project: project1._id,
+      dueDate: new Date(Date.now() + 86400000 * 5).toISOString().slice(0, 10),
+      creator: user1.id,
+      assignee: user1.id,
+      project: project1.id,
     });
 
     console.log('Created seed tasks.');
 
-    await Team.create({
+    db.createTeam({
       name: 'Frontend Core',
       description: 'Core web application development team',
-      owner: user1._id,
-      members: [
-        { user: user1._id, role: 'owner' },
-        { user: user2._id, role: 'member' },
-      ],
-      projects: [project1._id],
+      owner: user1.id,
     });
 
     console.log('Created seed team.');

@@ -1,8 +1,6 @@
 import express from 'express';
 import asyncHandler from '../middleware/asyncHandler.js';
-import Project from '../models/Project.js';
-import Task from '../models/Task.js';
-import Notification from '../models/Notification.js';
+import { db } from '../db.js';
 import authMiddleware from '../middleware/auth.js';
 
 const router = express.Router();
@@ -13,20 +11,7 @@ router.get(
   '/',
   asyncHandler(async (req, res) => {
     const { status, search } = req.query;
-    const filter = { $or: [{ owner: req.user.id }, { teamMembers: req.user.id }] };
-
-    if (status) filter.status = status;
-    if (search) {
-      filter.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-      ];
-    }
-
-    const projects = await Project.find(filter)
-      .sort({ createdAt: -1 })
-      .populate('owner teamMembers', 'name email avatar role');
-
+    const projects = db.listProjects({ userId: req.user.id, status, search });
     res.status(200).json({ projects });
   })
 );
@@ -41,16 +26,13 @@ router.post(
       return res.status(400).json({ error: 'Project name is required' });
     }
 
-    const project = await Project.create({
+    const project = db.createProject({
       name: name.trim(),
       description: description || '',
       startDate: startDate || null,
       dueDate: dueDate || null,
       owner: req.user.id,
-      teamMembers: [req.user.id],
     });
-
-    await project.populate('owner teamMembers', 'name email avatar role');
 
     res.status(201).json({ project });
   })
@@ -60,21 +42,16 @@ router.post(
 router.get(
   '/:id',
   asyncHandler(async (req, res) => {
-    const project = await Project.findById(req.params.id)
-      .populate('owner teamMembers tasks comments.user', 'name email avatar role')
-      .populate({
-        path: 'tasks',
-        populate: { path: 'assignee creator', select: 'name email avatar' },
-      });
+    const project = db.getProjectById(req.params.id);
 
     if (!project) {
       return res.status(404).json({ error: 'Project not found' });
     }
 
-    const isMember = project.teamMembers.some((m) => {
-      const memberId = m?._id ? m._id.toString() : m?.toString();
-      return memberId === req.user.id;
-    });
+    const isMember = (project.teamMembers || []).some(
+      (m) => (m._id || m.id) === req.user.id
+    );
+
     if (!isMember) {
       return res.status(403).json({ error: 'Not authorized' });
     }
@@ -89,25 +66,25 @@ router.put(
   asyncHandler(async (req, res) => {
     const { name, description, status, progress, startDate, dueDate } = req.body;
 
-    const project = await Project.findById(req.params.id);
-    if (!project) {
+    const existingProject = db.getProjectById(req.params.id);
+    if (!existingProject) {
       return res.status(404).json({ error: 'Project not found' });
     }
 
-    const ownerId = project.owner?._id ? project.owner._id.toString() : project.owner?.toString();
+    const ownerId = existingProject.owner?._id || existingProject.owner?.id || existingProject.owner;
     if (ownerId !== req.user.id) {
       return res.status(403).json({ error: 'Only owner can update project' });
     }
 
-    if (name) project.name = name.trim();
-    if (description !== undefined) project.description = description;
-    if (status) project.status = status;
-    if (progress !== undefined) project.progress = progress;
-    if (startDate) project.startDate = startDate;
-    if (dueDate) project.dueDate = dueDate;
+    const patch = {};
+    if (name) patch.name = name.trim();
+    if (description !== undefined) patch.description = description;
+    if (status) patch.status = status;
+    if (progress !== undefined) patch.progress = progress;
+    if (startDate) patch.startDate = startDate;
+    if (dueDate) patch.dueDate = dueDate;
 
-    await project.save();
-    await project.populate('owner teamMembers', 'name email avatar role');
+    const project = db.updateProject(req.params.id, patch);
 
     res.status(200).json({ project });
   })
@@ -119,36 +96,30 @@ router.post(
   asyncHandler(async (req, res) => {
     const { userId } = req.body;
 
-    const project = await Project.findById(req.params.id);
-    if (!project) {
+    const existingProject = db.getProjectById(req.params.id);
+    if (!existingProject) {
       return res.status(404).json({ error: 'Project not found' });
     }
 
-    const ownerId = project.owner?._id ? project.owner._id.toString() : project.owner?.toString();
+    const ownerId = existingProject.owner?._id || existingProject.owner?.id || existingProject.owner;
     if (ownerId !== req.user.id) {
       return res.status(403).json({ error: 'Only owner can add members' });
     }
 
-    const isAlreadyMember = project.teamMembers.some((m) => {
-      const id = m?._id ? m._id.toString() : m?.toString();
-      return id === userId;
-    });
-
-    if (isAlreadyMember) {
+    const currentMembers = (existingProject.teamMembers || []).map((m) => m._id || m.id);
+    if (currentMembers.includes(userId)) {
       return res.status(409).json({ error: 'User already a member' });
     }
 
-    project.teamMembers.push(userId);
-    await project.save();
-    await project.populate('owner teamMembers', 'name email avatar role');
+    const updatedMembers = [...currentMembers, userId];
+    const project = db.updateProject(req.params.id, { teamMembers: updatedMembers });
 
-    // Create notification
-    await Notification.create({
+    db.createNotification({
       user: userId,
       type: 'project_update',
       title: 'Added to Project',
       message: `${req.user.name} added you to "${project.name}"`,
-      relatedProject: project._id,
+      relatedProject: project.id,
       relatedUser: req.user.id,
     });
 
@@ -160,22 +131,20 @@ router.post(
 router.delete(
   '/:id/members/:userId',
   asyncHandler(async (req, res) => {
-    const project = await Project.findById(req.params.id);
-    if (!project) {
+    const existingProject = db.getProjectById(req.params.id);
+    if (!existingProject) {
       return res.status(404).json({ error: 'Project not found' });
     }
 
-    const ownerId = project.owner?._id ? project.owner._id.toString() : project.owner?.toString();
+    const ownerId = existingProject.owner?._id || existingProject.owner?.id || existingProject.owner;
     if (ownerId !== req.user.id) {
       return res.status(403).json({ error: 'Only owner can remove members' });
     }
 
-    project.teamMembers = project.teamMembers.filter((m) => {
-      const id = m?._id ? m._id.toString() : m?.toString();
-      return id !== req.params.userId;
-    });
-    await project.save();
-    await project.populate('owner teamMembers', 'name email avatar role');
+    const currentMembers = (existingProject.teamMembers || []).map((m) => m._id || m.id);
+    const updatedMembers = currentMembers.filter((mId) => mId !== req.params.userId);
+
+    const project = db.updateProject(req.params.id, { teamMembers: updatedMembers });
 
     res.status(200).json({ project });
   })
@@ -185,19 +154,17 @@ router.delete(
 router.delete(
   '/:id',
   asyncHandler(async (req, res) => {
-    const project = await Project.findById(req.params.id);
-    if (!project) {
+    const existingProject = db.getProjectById(req.params.id);
+    if (!existingProject) {
       return res.status(404).json({ error: 'Project not found' });
     }
 
-    const ownerId = project.owner?._id ? project.owner._id.toString() : project.owner?.toString();
+    const ownerId = existingProject.owner?._id || existingProject.owner?.id || existingProject.owner;
     if (ownerId !== req.user.id) {
       return res.status(403).json({ error: 'Only owner can delete project' });
     }
 
-    // Delete all tasks associated with project
-    await Task.deleteMany({ project: req.params.id });
-    await Project.findByIdAndDelete(req.params.id);
+    db.deleteProject(req.params.id);
 
     res.status(200).json({ message: 'Project deleted' });
   })

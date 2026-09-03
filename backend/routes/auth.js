@@ -1,8 +1,10 @@
 import express from 'express';
+import bcrypt from 'bcryptjs';
 import asyncHandler from '../middleware/asyncHandler.js';
-import User from '../models/User.js';
+import { db } from '../db.js';
 import { generateToken } from '../utils/helpers.js';
 import { authLimiter } from '../config/rateLimiter.js';
+import authMiddleware from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -19,23 +21,27 @@ router.post(
       });
     }
 
-    const existingUser = await User.findOne({ email: email.toLowerCase() });
+    const existingUser = db.findUserByEmail(email);
     if (existingUser) {
       return res.status(409).json({ error: 'Email already registered' });
     }
 
-    const user = await User.create({
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    const user = db.createUser({
       name: name || email.split('@')[0],
       email: email.toLowerCase(),
-      password,
+      password: hashedPassword,
     });
 
-    const token = generateToken(user._id);
+    const token = generateToken(user.id);
 
     res.status(201).json({
       token,
       user: {
-        id: user._id,
+        id: user.id,
+        _id: user.id,
         name: user.name,
         email: user.email,
         role: user.role,
@@ -56,19 +62,23 @@ router.post(
       return res.status(400).json({ error: 'Email and password required' });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase() }).select(
-      '+password'
-    );
-    if (!user || !(await user.matchPassword(password))) {
+    const user = db.findUserByEmail(email);
+    if (!user) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
-    const token = generateToken(user._id);
+    const match = await bcrypt.compare(password, user.password);
+    if (!match) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    const token = generateToken(user._id || user.id);
 
     res.status(200).json({
       token,
       user: {
-        id: user._id,
+        id: user._id || user.id,
+        _id: user._id || user.id,
         name: user.name,
         email: user.email,
         role: user.role,
@@ -81,8 +91,12 @@ router.post(
 // Get current user
 router.get(
   '/me',
+  authMiddleware,
   asyncHandler(async (req, res) => {
-    const user = await User.findById(req.user.id).populate('assignedTasks assignedProjects');
+    const user = db.findUserById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
     res.status(200).json({ user });
   })
 );

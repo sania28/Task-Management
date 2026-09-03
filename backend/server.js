@@ -2,7 +2,6 @@ import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import morgan from 'morgan';
-import connectDB from './config/database.js';
 import errorHandler from './middleware/errorHandler.js';
 import { apiLimiter } from './config/rateLimiter.js';
 
@@ -21,9 +20,6 @@ import teamRoutes from './routes/teams.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
-
-// Connect to MongoDB
-connectDB();
 
 // Middleware
 app.use(morgan('dev'));
@@ -76,7 +72,6 @@ app.use(errorHandler);
 app.listen(PORT, () => {
   console.log(`✓ Server running on http://localhost:${PORT}`);
   console.log(`✓ Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`✓ MongoDB: ${process.env.MONGODB_URI}`);
 });
 
 export default app;
