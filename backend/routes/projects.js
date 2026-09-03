@@ -71,9 +71,10 @@ router.get(
       return res.status(404).json({ error: 'Project not found' });
     }
 
-    const isMember = project.teamMembers.some(
-      (m) => m._id.toString() === req.user.id
-    );
+    const isMember = project.teamMembers.some((m) => {
+      const memberId = m?._id ? m._id.toString() : m?.toString();
+      return memberId === req.user.id;
+    });
     if (!isMember) {
       return res.status(403).json({ error: 'Not authorized' });
     }
@@ -93,7 +94,8 @@ router.put(
       return res.status(404).json({ error: 'Project not found' });
     }
 
-    if (project.owner.toString() !== req.user.id) {
+    const ownerId = project.owner?._id ? project.owner._id.toString() : project.owner?.toString();
+    if (ownerId !== req.user.id) {
       return res.status(403).json({ error: 'Only owner can update project' });
     }
 
@@ -122,11 +124,17 @@ router.post(
       return res.status(404).json({ error: 'Project not found' });
     }
 
-    if (project.owner.toString() !== req.user.id) {
+    const ownerId = project.owner?._id ? project.owner._id.toString() : project.owner?.toString();
+    if (ownerId !== req.user.id) {
       return res.status(403).json({ error: 'Only owner can add members' });
     }
 
-    if (project.teamMembers.includes(userId)) {
+    const isAlreadyMember = project.teamMembers.some((m) => {
+      const id = m?._id ? m._id.toString() : m?.toString();
+      return id === userId;
+    });
+
+    if (isAlreadyMember) {
       return res.status(409).json({ error: 'User already a member' });
     }
 
@@ -157,13 +165,15 @@ router.delete(
       return res.status(404).json({ error: 'Project not found' });
     }
 
-    if (project.owner.toString() !== req.user.id) {
+    const ownerId = project.owner?._id ? project.owner._id.toString() : project.owner?.toString();
+    if (ownerId !== req.user.id) {
       return res.status(403).json({ error: 'Only owner can remove members' });
     }
 
-    project.teamMembers = project.teamMembers.filter(
-      (m) => m.toString() !== req.params.userId
-    );
+    project.teamMembers = project.teamMembers.filter((m) => {
+      const id = m?._id ? m._id.toString() : m?.toString();
+      return id !== req.params.userId;
+    });
     await project.save();
     await project.populate('owner teamMembers', 'name email avatar role');
 
@@ -180,7 +190,8 @@ router.delete(
       return res.status(404).json({ error: 'Project not found' });
     }
 
-    if (project.owner.toString() !== req.user.id) {
+    const ownerId = project.owner?._id ? project.owner._id.toString() : project.owner?.toString();
+    if (ownerId !== req.user.id) {
       return res.status(403).json({ error: 'Only owner can delete project' });
     }
 

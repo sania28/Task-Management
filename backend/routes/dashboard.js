@@ -1,4 +1,5 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import asyncHandler from '../middleware/asyncHandler.js';
 import Task from '../models/Task.js';
 import Project from '../models/Project.js';
@@ -60,13 +61,15 @@ router.get(
 
     const teamMembersCount = teamMemberIds.size;
 
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+
     // Task distribution by status
     const tasksByStatus = await Task.aggregate([
       {
         $match: {
           $or: [
-            { creator: require('mongoose').Types.ObjectId(userId) },
-            { assignee: require('mongoose').Types.ObjectId(userId) },
+            { creator: userObjectId },
+            { assignee: userObjectId },
           ],
         },
       },
@@ -83,8 +86,8 @@ router.get(
       {
         $match: {
           $or: [
-            { creator: require('mongoose').Types.ObjectId(userId) },
-            { assignee: require('mongoose').Types.ObjectId(userId) },
+            { creator: userObjectId },
+            { assignee: userObjectId },
           ],
         },
       },
