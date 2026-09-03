@@ -1,6 +1,6 @@
 import express from 'express';
 import asyncHandler from '../middleware/asyncHandler.js';
-import Notification from '../models/Notification.js';
+import { db } from '../db.js';
 import authMiddleware from '../middleware/auth.js';
 
 const router = express.Router();
@@ -11,21 +11,11 @@ router.get(
   '/',
   asyncHandler(async (req, res) => {
     const { unreadOnly } = req.query;
-    const filter = { user: req.user.id };
-
-    if (unreadOnly === 'true') {
-      filter.isRead = false;
-    }
-
-    const notifications = await Notification.find(filter)
-      .sort({ createdAt: -1 })
-      .limit(50)
-      .populate('relatedUser', 'name email avatar');
-
-    const unreadCount = await Notification.countDocuments({
-      user: req.user.id,
-      isRead: false,
+    const notifications = db.listNotifications(req.user.id, {
+      unreadOnly: unreadOnly === 'true',
     });
+
+    const unreadCount = db.listNotifications(req.user.id, { unreadOnly: true }).length;
 
     res.status(200).json({ notifications, unreadCount });
   })
@@ -35,11 +25,7 @@ router.get(
 router.put(
   '/:id/read',
   asyncHandler(async (req, res) => {
-    const notification = await Notification.findByIdAndUpdate(
-      req.params.id,
-      { isRead: true, readAt: new Date() },
-      { new: true }
-    );
+    const notification = db.markNotificationRead(req.params.id);
 
     if (!notification) {
       return res.status(404).json({ error: 'Notification not found' });
@@ -53,26 +39,8 @@ router.put(
 router.put(
   '/read-all',
   asyncHandler(async (req, res) => {
-    await Notification.updateMany(
-      { user: req.user.id, isRead: false },
-      { isRead: true, readAt: new Date() }
-    );
-
+    db.markAllNotificationsRead(req.user.id);
     res.status(200).json({ message: 'All notifications marked as read' });
-  })
-);
-
-// Delete notification
-router.delete(
-  '/:id',
-  asyncHandler(async (req, res) => {
-    const notification = await Notification.findByIdAndDelete(req.params.id);
-
-    if (!notification) {
-      return res.status(404).json({ error: 'Notification not found' });
-    }
-
-    res.status(200).json({ message: 'Notification deleted' });
   })
 );
 

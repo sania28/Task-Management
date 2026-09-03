@@ -1,10 +1,7 @@
 import express from 'express';
 import asyncHandler from '../middleware/asyncHandler.js';
-import Task from '../models/Task.js';
-import Project from '../models/Project.js';
-import Notification from '../models/Notification.js';
+import { db } from '../db.js';
 import authMiddleware from '../middleware/auth.js';
-import { isTaskOverdue } from '../utils/helpers.js';
 
 const router = express.Router();
 router.use(authMiddleware);
@@ -14,23 +11,14 @@ router.get(
   '/',
   asyncHandler(async (req, res) => {
     const { status, priority, projectId, assigneeId, search } = req.query;
-    const filter = { $or: [{ creator: req.user.id }, { assignee: req.user.id }] };
-
-    if (status) filter.status = status;
-    if (priority) filter.priority = priority;
-    if (projectId) filter.project = projectId;
-    if (assigneeId) filter.assignee = assigneeId;
-    if (search) {
-      filter.$or = [
-        { title: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-      ];
-    }
-
-    const tasks = await Task.find(filter)
-      .sort({ dueDate: 1, priority: -1, createdAt: -1 })
-      .populate('assignee creator project', 'name email avatar');
-
+    const tasks = db.listTasks({
+      userId: req.user.id,
+      status,
+      priority,
+      projectId,
+      assigneeId,
+      search,
+    });
     res.status(200).json({ tasks });
   })
 );
@@ -45,7 +33,7 @@ router.post(
       return res.status(400).json({ error: 'Task title is required' });
     }
 
-    const task = await Task.create({
+    const task = db.createTask({
       title: title.trim(),
       description: description || '',
       priority: priority || 'medium',
@@ -55,24 +43,13 @@ router.post(
       project: projectId || null,
     });
 
-    if (projectId) {
-      await Project.findByIdAndUpdate(
-        projectId,
-        { $push: { tasks: task._id }, $inc: { totalTasks: 1 } },
-        { new: true }
-      );
-    }
-
-    await task.populate('assignee creator project', 'name email avatar');
-
-    // Create notification for assignee
     if (assigneeId && assigneeId !== req.user.id) {
-      await Notification.create({
+      db.createNotification({
         user: assigneeId,
         type: 'task_assigned',
         title: 'Task Assigned',
         message: `${req.user.name} assigned you "${title}"`,
-        relatedTask: task._id,
+        relatedTask: task.id,
         relatedUser: req.user.id,
       });
     }
@@ -85,19 +62,16 @@ router.post(
 router.get(
   '/:id',
   asyncHandler(async (req, res) => {
-    const task = await Task.findById(req.params.id).populate(
-      'assignee creator project comments.user',
-      'name email avatar'
-    );
+    const task = db.getTaskById(req.params.id);
 
     if (!task) {
       return res.status(404).json({ error: 'Task not found' });
     }
 
-    const creatorId = task.creator?._id ? task.creator._id.toString() : task.creator?.toString();
-    const assigneeId = task.assignee?._id ? task.assignee._id.toString() : task.assignee?.toString();
-    const isOwner = creatorId === req.user.id || assigneeId === req.user.id;
-    if (!isOwner) {
+    const creatorId = task.creator?._id || task.creator?.id || task.creator;
+    const assigneeId = task.assignee?._id || task.assignee?.id || task.assignee;
+
+    if (creatorId !== req.user.id && assigneeId !== req.user.id) {
       return res.status(403).json({ error: 'Not authorized' });
     }
 
@@ -110,45 +84,27 @@ router.put(
   '/:id',
   asyncHandler(async (req, res) => {
     const { title, description, status, priority, dueDate, assigneeId, completionPercentage } = req.body;
-    const allowedFields = ['title', 'description', 'status', 'priority', 'dueDate', 'assignee', 'completionPercentage'];
 
-    const updateData = {};
-    if (title) updateData.title = title.trim();
-    if (description !== undefined) updateData.description = description;
-    if (status) updateData.status = status;
-    if (priority) updateData.priority = priority;
-    if (dueDate) updateData.dueDate = dueDate;
-    if (assigneeId) updateData.assignee = assigneeId;
-    if (completionPercentage !== undefined) updateData.completionPercentage = completionPercentage;
-
-    const task = await Task.findById(req.params.id);
-    if (!task) {
+    const existingTask = db.getTaskById(req.params.id);
+    if (!existingTask) {
       return res.status(404).json({ error: 'Task not found' });
     }
 
-    const creatorId = task.creator?._id ? task.creator._id.toString() : task.creator?.toString();
+    const creatorId = existingTask.creator?._id || existingTask.creator?.id || existingTask.creator;
     if (creatorId !== req.user.id) {
       return res.status(403).json({ error: 'Not authorized' });
     }
 
-    Object.assign(task, updateData);
-    task.isOverdue = isTaskOverdue(task.dueDate, task.status);
-    await task.save();
-    await task.populate('assignee creator project', 'name email avatar');
+    const patch = {};
+    if (title) patch.title = title.trim();
+    if (description !== undefined) patch.description = description;
+    if (status) patch.status = status;
+    if (priority) patch.priority = priority;
+    if (dueDate) patch.dueDate = dueDate;
+    if (assigneeId) patch.assignee = assigneeId;
+    if (completionPercentage !== undefined) patch.completionPercentage = completionPercentage;
 
-    // Update project progress if status changed
-    if (status && task.project) {
-      const project = await Project.findById(task.project);
-      if (project) {
-        const completedCount = await Task.countDocuments({
-          project: task.project,
-          status: 'completed',
-        });
-        project.completedTasks = completedCount;
-        project.progress = Math.round((completedCount / project.totalTasks) * 100);
-        await project.save();
-      }
-    }
+    const task = db.updateTask(req.params.id, patch);
 
     res.status(200).json({ task });
   })
@@ -158,25 +114,17 @@ router.put(
 router.delete(
   '/:id',
   asyncHandler(async (req, res) => {
-    const task = await Task.findById(req.params.id);
-    if (!task) {
+    const existingTask = db.getTaskById(req.params.id);
+    if (!existingTask) {
       return res.status(404).json({ error: 'Task not found' });
     }
 
-    const creatorId = task.creator?._id ? task.creator._id.toString() : task.creator?.toString();
+    const creatorId = existingTask.creator?._id || existingTask.creator?.id || existingTask.creator;
     if (creatorId !== req.user.id) {
       return res.status(403).json({ error: 'Not authorized' });
     }
 
-    if (task.project) {
-      await Project.findByIdAndUpdate(
-        task.project,
-        { $pull: { tasks: task._id }, $inc: { totalTasks: -1 } },
-        { new: true }
-      );
-    }
-
-    await Task.findByIdAndDelete(req.params.id);
+    db.deleteTask(req.params.id);
     res.status(200).json({ message: 'Task deleted' });
   })
 );
@@ -190,24 +138,16 @@ router.post(
       return res.status(400).json({ error: 'Comment text required' });
     }
 
-    const task = await Task.findByIdAndUpdate(
-      req.params.id,
-      {
-        $push: {
-          comments: {
-            user: req.user.id,
-            text: text.trim(),
-          },
-        },
-      },
-      { new: true }
-    ).populate('comments.user', 'name email avatar');
+    const comments = db.addCommentToTask(req.params.id, {
+      userId: req.user.id,
+      text: text.trim(),
+    });
 
-    if (!task) {
+    if (!comments) {
       return res.status(404).json({ error: 'Task not found' });
     }
 
-    res.status(201).json({ comments: task.comments });
+    res.status(201).json({ comments });
   })
 );
 
