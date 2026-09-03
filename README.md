@@ -14,7 +14,7 @@ A full-stack task management application with a **React** frontend, **Node.js/Ex
 
 ## Tech Stack
 
-- **Frontend**: React 18, Vite, React Router v6, Axios, Lucide React, CSS modules.
+- **Frontend**: React 18, Vite, React Router v6, Axios, Lucide React.
 - **Backend**: Node.js, Express.js, Mongoose (MongoDB), JSON Web Tokens (JWT), Bcrypt.js, Morgan, Express Rate Limit.
 
 ## Getting Started
@@ -22,11 +22,11 @@ A full-stack task management application with a **React** frontend, **Node.js/Ex
 ### Prerequisites
 
 - Node.js (v18+)
-- MongoDB running locally on `mongodb://localhost:27017/task-manager` or a remote MongoDB Atlas URI.
+- MongoDB running locally or a remote MongoDB Atlas URI.
 
-### Environment Setup
+### Local Environment Setup
 
-Create `.env` in the root directory (or use `.env.example` as a template):
+Create `.env` in the root directory (or copy from `.env.example`):
 
 ```env
 PORT=3001
@@ -43,8 +43,8 @@ VITE_API_URL=http://localhost:3001/api
 ```bash
 cd backend
 npm install
-npm run seed  # Populates sample users, tasks, projects, and teams
-npm run dev   # Starts Express server on http://localhost:3001
+npm run seed  # Seeds initial users, tasks, projects, and teams
+npm run dev   # Starts Express API server on http://localhost:3001
 ```
 
 ### Frontend Installation & Startup
@@ -52,7 +52,7 @@ npm run dev   # Starts Express server on http://localhost:3001
 ```bash
 cd frontend
 npm install
-npm run dev   # Starts Vite development server on http://localhost:5173
+npm run dev   # Starts Vite React dev server on http://localhost:5173
 ```
 
 To build the frontend for production:
@@ -62,7 +62,50 @@ cd frontend
 npm run build
 ```
 
-## API Endpoint Overview
+---
+
+## Render Deployment Instructions
+
+You can deploy both the Backend Web Service and Frontend Static Site on Render using the instructions below.
+
+### 1. Deploy Backend Web Service on Render
+
+1. Log into [Render Dashboard](https://dashboard.render.com/) and click **New +** > **Web Service**.
+2. Connect your Git repository.
+3. Configure the settings:
+   - **Name**: `task-manager-backend`
+   - **Root Directory**: `backend`
+   - **Environment**: `Node`
+   - **Build Command**: `npm install`
+   - **Start Command**: `npm start`
+4. Add the required Environment Variables in Render:
+   - `MONGODB_URI`: Your MongoDB Atlas connection URI (e.g. `mongodb+srv://<user>:<password>@cluster.mongodb.net/task-manager`)
+   - `JWT_SECRET`: A secure random secret string
+   - `JWT_EXPIRE`: `7d`
+   - `NODE_ENV`: `production`
+   - `CORS_ORIGIN`: Your deployed frontend URL on Render (e.g. `https://task-manager-frontend.onrender.com`)
+5. Deploy the backend service and copy its public URL (e.g. `https://task-manager-backend.onrender.com`).
+
+### 2. Deploy Frontend Static Site on Render
+
+1. In Render Dashboard, click **New +** > **Static Site**.
+2. Connect your Git repository.
+3. Configure the settings:
+   - **Name**: `task-manager-frontend`
+   - **Root Directory**: `frontend`
+   - **Build Command**: `npm install && npm run build`
+   - **Publish Directory**: `dist`
+4. Add the required Environment Variable in Render:
+   - `VITE_API_URL`: Your backend URL with `/api` appended (e.g. `https://task-manager-backend.onrender.com/api`)
+5. Configure Rewrite/Redirect rules under Static Site settings to handle React Router client-side routing:
+   - **Source**: `/*`
+   - **Destination**: `/index.html`
+   - **Action**: `Rewrite`
+6. Deploy the static site.
+
+---
+
+## API Endpoint Reference
 
 - `POST /api/auth/register` - Register a new user
 - `POST /api/auth/login` - Authenticate user & retrieve JWT
