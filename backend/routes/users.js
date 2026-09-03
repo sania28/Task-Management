@@ -1,7 +1,8 @@
 import express from 'express';
-import bcrypt from 'bcryptjs';
 import asyncHandler from '../middleware/asyncHandler.js';
-import { db } from '../db.js';
+import User from '../models/User.js';
+import Task from '../models/Task.js';
+import Project from '../models/Project.js';
 import authMiddleware from '../middleware/auth.js';
 
 const router = express.Router();
@@ -12,17 +13,33 @@ router.get(
   '/',
   asyncHandler(async (req, res) => {
     const { role, status, search } = req.query;
-    const users = db.listUsers({ role, status, search });
+    const filter = {};
 
-    const usersWithStats = users.map((user) => {
-      const userTasks = db.listTasks({ assigneeId: user.id });
-      const userProjects = db.listProjects({ userId: user.id });
-      return {
-        ...user,
-        assignedTasksCount: userTasks.length,
-        projectsCount: userProjects.length,
-      };
-    });
+    if (role) filter.role = role;
+    if (status) filter.status = status;
+    if (search) {
+      filter.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+      ];
+    }
+
+    const users = await User.find(filter).select('-password');
+
+    // Add task count for each user
+    const usersWithStats = await Promise.all(
+      users.map(async (user) => {
+        const taskCount = await Task.countDocuments({ assignee: user._id });
+        const projectCount = await Project.countDocuments({
+          teamMembers: user._id,
+        });
+        return {
+          ...user.toObject(),
+          assignedTasksCount: taskCount,
+          projectsCount: projectCount,
+        };
+      })
+    );
 
     res.status(200).json({ users: usersWithStats });
   })
@@ -32,7 +49,9 @@ router.get(
 router.get(
   '/:id',
   asyncHandler(async (req, res) => {
-    const user = db.findUserById(req.params.id);
+    const user = await User.findById(req.params.id)
+      .select('-password')
+      .populate('assignedTasks assignedProjects');
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
@@ -51,19 +70,18 @@ router.put(
     }
 
     const { name, avatar, bio, department } = req.body;
-    const patch = {};
-
-    if (name) patch.name = name.trim();
-    if (avatar !== undefined) patch.avatar = avatar;
-    if (bio !== undefined) patch.bio = bio;
-    if (department !== undefined) patch.department = department;
-
-    const user = db.updateUser(req.params.id, patch);
+    const user = await User.findById(req.params.id);
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
+    if (name) user.name = name.trim();
+    if (avatar !== undefined) user.avatar = avatar;
+    if (bio !== undefined) user.bio = bio;
+    if (department !== undefined) user.department = department;
+
+    await user.save();
     res.status(200).json({ user });
   })
 );
@@ -77,9 +95,9 @@ router.post(
     }
 
     const { currentPassword, newPassword } = req.body;
-    const userWithPassword = db.findUserByIdWithPassword(req.params.id);
+    const user = await User.findById(req.params.id).select('+password');
 
-    if (!userWithPassword) {
+    if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
@@ -87,8 +105,7 @@ router.post(
       return res.status(400).json({ error: 'Current and new password required' });
     }
 
-    const match = await bcrypt.compare(currentPassword, userWithPassword.password);
-    if (!match) {
+    if (!(await user.matchPassword(currentPassword))) {
       return res.status(401).json({ error: 'Current password is incorrect' });
     }
 
@@ -96,10 +113,8 @@ router.post(
       return res.status(400).json({ error: 'New password must be at least 6 characters' });
     }
 
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(newPassword, salt);
-
-    db.updateUser(req.params.id, { password: hashedPassword });
+    user.password = newPassword;
+    await user.save();
 
     res.status(200).json({ message: 'Password updated successfully' });
   })

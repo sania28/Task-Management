@@ -1,6 +1,7 @@
 import express from 'express';
 import asyncHandler from '../middleware/asyncHandler.js';
-import { db } from '../db.js';
+import Message from '../models/Message.js';
+import Notification from '../models/Notification.js';
 import authMiddleware from '../middleware/auth.js';
 
 const router = express.Router();
@@ -10,15 +11,22 @@ router.use(authMiddleware);
 router.get(
   '/conversations',
   asyncHandler(async (req, res) => {
-    const allUsers = db.listUsers().filter((u) => u.id !== req.user.id);
-    const conversations = allUsers.map((user) => {
-      const messages = db.listMessagesBetween(req.user.id, user.id);
-      const lastMessage = messages[messages.length - 1] || null;
-      return {
-        user,
-        lastMessage,
-      };
-    }).filter((c) => c.lastMessage);
+    const messages = await Message.find({
+      $or: [{ sender: req.user.id }, { recipient: req.user.id }],
+    }).sort({ createdAt: -1 });
+
+    const conversationMap = new Map();
+    messages.forEach((msg) => {
+      const other =
+        msg.sender.toString() === req.user.id ? msg.recipient : msg.sender;
+      if (!conversationMap.has(other.toString())) {
+        conversationMap.set(other.toString(), msg);
+      }
+    });
+
+    const conversations = Array.from(conversationMap.values()).sort(
+      (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+    );
 
     res.status(200).json({ conversations });
   })
@@ -28,7 +36,25 @@ router.get(
 router.get(
   '/:userId',
   asyncHandler(async (req, res) => {
-    const messages = db.listMessagesBetween(req.user.id, req.params.userId);
+    const messages = await Message.find({
+      $or: [
+        { sender: req.user.id, recipient: req.params.userId },
+        { sender: req.params.userId, recipient: req.user.id },
+      ],
+    })
+      .sort({ createdAt: 1 })
+      .populate('sender recipient', 'name email avatar');
+
+    // Mark as read
+    await Message.updateMany(
+      {
+        sender: req.params.userId,
+        recipient: req.user.id,
+        isRead: false,
+      },
+      { isRead: true, readAt: new Date() }
+    );
+
     res.status(200).json({ messages });
   })
 );
@@ -47,13 +73,19 @@ router.post(
       return res.status(400).json({ error: 'Cannot message yourself' });
     }
 
-    const message = db.createMessage({
+    const conversationId = [req.user.id, recipientId].sort().join('-');
+
+    const message = await Message.create({
       sender: req.user.id,
       recipient: recipientId,
       content: content.trim(),
+      conversationId,
     });
 
-    db.createNotification({
+    await message.populate('sender recipient', 'name email avatar');
+
+    // Create notification
+    await Notification.create({
       user: recipientId,
       type: 'message',
       title: 'New Message',
@@ -62,6 +94,24 @@ router.post(
     });
 
     res.status(201).json({ message });
+  })
+);
+
+// Mark messages as read
+router.put(
+  '/:messageId/read',
+  asyncHandler(async (req, res) => {
+    const message = await Message.findByIdAndUpdate(
+      req.params.messageId,
+      { isRead: true, readAt: new Date() },
+      { new: true }
+    );
+
+    if (!message) {
+      return res.status(404).json({ error: 'Message not found' });
+    }
+
+    res.status(200).json({ message });
   })
 );
 
