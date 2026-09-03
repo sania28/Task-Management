@@ -1,111 +1,123 @@
-# Dispatch — Task Manager
+# Dispatch — Full-Stack Task Management Application
 
-A full-stack task management app: user accounts, task CRUD, and live updates
-across tabs/devices (via Server-Sent Events).
+A full-stack task management application with a **React** frontend, **Node.js/Express** REST API backend, and **MongoDB** database integration.
 
-**Zero external dependencies** — the backend runs on Node's standard library
-only (`http`, `crypto`, `fs`). No `npm install` needed, on your machine or on
-the server. That also means there's nothing here to `npm audit`, no
-lockfile drift, and it deploys anywhere Node runs.
+## Features
 
-## How it's built
+- **User Authentication**: Secure JWT-based sign up, login, profile management, and password change using `bcryptjs`.
+- **Dashboard**: Real-time summary statistics for tasks, projects, overdue items, team counts, and task distribution bar charts.
+- **Task Management**: Kanban task board with status stages (`To Do`, `In Progress`, `Completed`), priority badges, project association, assignee, and comments.
+- **Project Management**: Project overview, status tracking, automatic completion progress calculation, and team member management.
+- **Direct Messages**: Real-time polling chat system for direct communication between team members.
+- **Team Management**: Organization directory and custom team group management.
+- **Notifications**: In-app notifications with unread badge counter for task assignments, project additions, and messages.
 
-- **Backend** (`/backend`): a plain `http` server. Passwords are hashed with
-  `crypto.scrypt`; login sessions are signed tokens (same idea as a JWT,
-  built with `crypto.createHmac`, verified on every request). Data is stored
-  in two JSON files under `backend/data/` — enough for learning/small use;
-  see "Growing beyond this" below for swapping in a real database.
-- **Frontend** (`/frontend`): plain HTML/CSS/JS, no build step. It calls the
-  API with `fetch` and listens for live changes with `EventSource` (SSE).
-- **Real-time updates**: implemented with **SSE instead of WebSockets**.
-  Task changes only need to flow server → browser, which is exactly what SSE
-  is for, using plain HTTP — no extra dependency required. (If you want true
-  bidirectional WebSockets later, swap the `/api/tasks/stream` route for the
-  `ws` package.)
+## Tech Stack
 
-## Run it locally
+- **Frontend**: React 18, Vite, React Router v6, Axios, Lucide React.
+- **Backend**: Node.js, Express.js, Mongoose (MongoDB), JSON Web Tokens (JWT), Bcrypt.js, Morgan, Express Rate Limit.
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js (v18+)
+- MongoDB running locally or a remote MongoDB Atlas URI.
+
+### Local Environment Setup
+
+Create `.env` in the root directory (or copy from `.env.example`):
+
+```env
+PORT=3001
+NODE_ENV=development
+MONGODB_URI=mongodb://localhost:27017/task-manager
+JWT_SECRET=your-super-secret-key
+JWT_EXPIRE=7d
+CORS_ORIGIN=http://localhost:5173,http://localhost:3000
+VITE_API_URL=http://localhost:3001/api
+```
+
+### Backend Installation & Startup
 
 ```bash
 cd backend
-node server.js
+npm install
+npm run seed  # Seeds initial users, tasks, projects, and teams into MongoDB
+npm run dev   # Starts Express API server on http://localhost:3001
 ```
 
-Open **http://localhost:3001** — the backend serves the frontend directly,
-so there's only one thing to run. Create an account, add a few tasks, and
-open the app in a second tab to watch live updates sync between them.
+### Frontend Installation & Startup
 
-Optional: set a real secret before running in anything but a sandbox —
 ```bash
-export TOKEN_SECRET="a-long-random-string"
-export PORT=3001
-node server.js
+cd frontend
+npm install
+npm run dev   # Starts Vite React dev server on http://localhost:5173
 ```
 
-## Deploying to your own server (VPS)
+To build the frontend for production:
 
-This assumes a fresh Ubuntu VPS (DigitalOcean, Linode, EC2, etc.) with a
-domain pointed at it. Steps:
-
-1. **Install Node** on the server:
 ```bash
-   curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-   sudo apt-get install -y nodejs
+cd frontend
+npm run build
 ```
 
-2. **Copy the project to the server**, e.g. with `scp` or `git`:
-```bash
-   scp -r task-manager your-user@your-server-ip:/home/your-user/
-```
+---
 
-3. **Set a real token secret and start it**:
-```bash
-   cd task-manager/backend
-   export TOKEN_SECRET="$(openssl rand -hex 32)"
-   export PORT=3001
-   node server.js
-```
+## Render Deployment Instructions
 
-4. **Keep it running** after you disconnect, with `pm2` (or `systemd`):
-```bash
-   sudo npm install -g pm2
-   pm2 start server.js --name dispatch --env TOKEN_SECRET="$(openssl rand -hex 32)"
-   pm2 save
-   pm2 startup   # prints a command to run so pm2 survives reboots
-```
+To deploy the application so that the React frontend UI is publicly accessible and communicates with the Node/Express backend:
 
-5. **Put Nginx in front of it** for HTTPS and a clean domain (SSE needs
-   `proxy_buffering off` or updates will lag):
-```nginx
-   server {
-       listen 80;
-       server_name yourdomain.com;
+### 1. Deploy Backend Web Service on Render
 
-       location / {
-           proxy_pass http://localhost:3001;
-           proxy_http_version 1.1;
-           proxy_set_header Connection "";
-           proxy_set_header Host $host;
-           proxy_buffering off;
-       }
-   }
-```
-   Then get a free certificate:
-```bash
-   sudo apt-get install -y certbot python3-certbot-nginx
-   sudo certbot --nginx -d yourdomain.com
-```
+1. Log into [Render Dashboard](https://dashboard.render.com/) and click **New +** > **Web Service**.
+2. Connect your Git repository (`sania28/Task-Management`).
+3. Configure the backend settings:
+   - **Name**: `task-manager-backend`
+   - **Root Directory**: `backend`
+   - **Environment**: `Node`
+   - **Build Command**: `npm install`
+   - **Start Command**: `npm start`
+4. Add Environment Variables in Render Backend Settings:
+   - `MONGODB_URI`: Your MongoDB Atlas connection URI (e.g. `mongodb+srv://<user>:<password>@cluster.mongodb.net/task-manager`)
+   - `JWT_SECRET`: A secure random secret string
+   - `JWT_EXPIRE`: `7d`
+   - `NODE_ENV`: `production`
+   - `CORS_ORIGIN`: Your deployed frontend Render URL (e.g. `https://task-manager-frontend.onrender.com`)
+5. Deploy the backend service and copy its public URL (e.g. `https://task-manager-backend.onrender.com`).
 
-That's it — `yourdomain.com` now serves the app over HTTPS, proxied to the
-Node process pm2 is keeping alive.
+### 2. Deploy Frontend Static Site on Render (Public UI)
 
-## Growing beyond this
+1. In Render Dashboard, click **New +** > **Static Site**.
+2. Connect your Git repository (`sania28/Task-Management`).
+3. Configure the frontend settings:
+   - **Name**: `task-manager-frontend`
+   - **Root Directory**: `frontend`
+   - **Build Command**: `npm install && npm run build`
+   - **Publish Directory**: `dist`
+4. Add Environment Variables in Render Frontend Settings:
+   - `VITE_API_URL`: Your backend service URL with `/api` (e.g. `https://task-manager-backend.onrender.com/api`)
+5. Configure Redirects / Rewrites rule under Static Site settings for React Router:
+   - **Source**: `/*`
+   - **Destination**: `/index.html`
+   - **Action**: `Rewrite`
+6. Deploy the static site and access your public React Task Management UI URL.
 
-Once the basics make sense, natural next steps:
-- Swap `backend/db.js` for a real database (Postgres via `pg`, or SQLite via
-  `better-sqlite3`) — the function signatures in `db.js` are the only thing
-  you'd need to reimplement.
-- Swap the hand-rolled token/SSE code for `jsonwebtoken` and `socket.io` —
-  useful once you want a second server instance (SSE/tokens here are
-  single-process; a real deployment behind a load balancer needs shared
-  session storage and a pub/sub layer for broadcasting).
-- Add password reset, email verification, and rate limiting on `/api/auth/*`.
+---
+
+## API Endpoint Reference
+
+- `POST /api/auth/register` - Register a new user
+- `POST /api/auth/login` - Authenticate user & retrieve JWT
+- `GET /api/auth/me` - Fetch authenticated user details
+- `GET /api/dashboard` - Fetch dashboard metrics & aggregated stats
+- `GET /api/tasks` - List tasks (with status, priority, search filters)
+- `POST /api/tasks` - Create a task
+- `PUT /api/tasks/:id` - Update task status/fields
+- `DELETE /api/tasks/:id` - Delete a task
+- `GET /api/projects` - List user projects
+- `POST /api/projects` - Create a project
+- `GET /api/messages/:userId` - Get direct message thread
+- `POST /api/messages` - Send a message
+- `GET /api/teams` - List team groups
+- `GET /api/notifications` - Fetch user notifications

@@ -62,18 +62,4 @@ router.put(
   })
 );
 
-// Delete notification
-router.delete(
-  '/:id',
-  asyncHandler(async (req, res) => {
-    const notification = await Notification.findByIdAndDelete(req.params.id);
-
-    if (!notification) {
-      return res.status(404).json({ error: 'Notification not found' });
-    }
-
-    res.status(200).json({ message: 'Notification deleted' });
-  })
-);
-
 export default router;

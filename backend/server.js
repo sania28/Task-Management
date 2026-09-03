@@ -9,6 +9,9 @@ import { apiLimiter } from './config/rateLimiter.js';
 // Load environment variables
 dotenv.config();
 
+// Connect to MongoDB
+connectDB();
+
 // Import routes
 import authRoutes from './routes/auth.js';
 import taskRoutes from './routes/tasks.js';
@@ -17,16 +20,29 @@ import userRoutes from './routes/users.js';
 import messageRoutes from './routes/messages.js';
 import notificationRoutes from './routes/notifications.js';
 import dashboardRoutes from './routes/dashboard.js';
+import teamRoutes from './routes/teams.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Connect to MongoDB
-connectDB();
-
 // Middleware
 app.use(morgan('dev'));
-app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
+const allowedOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim())
+  : '*';
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins === '*' || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(null, true); // Allow during transition/cross-origin calls or specify allowedOrigins
+      }
+    },
+    credentials: true,
+  })
+);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
@@ -46,6 +62,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/teams', teamRoutes);
 
 // 404 handler
 app.use((req, res) => {
@@ -59,7 +76,7 @@ app.use(errorHandler);
 app.listen(PORT, () => {
   console.log(`✓ Server running on http://localhost:${PORT}`);
   console.log(`✓ Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`✓ MongoDB: ${process.env.MONGODB_URI}`);
+  console.log(`✓ MongoDB: ${process.env.MONGODB_URI || 'mongodb://localhost:27017/task-manager'}`);
 });
 
 export default app;

@@ -3,6 +3,7 @@ import asyncHandler from '../middleware/asyncHandler.js';
 import User from '../models/User.js';
 import { generateToken } from '../utils/helpers.js';
 import { authLimiter } from '../config/rateLimiter.js';
+import authMiddleware from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -36,6 +37,7 @@ router.post(
       token,
       user: {
         id: user._id,
+        _id: user._id,
         name: user.name,
         email: user.email,
         role: user.role,
@@ -69,6 +71,7 @@ router.post(
       token,
       user: {
         id: user._id,
+        _id: user._id,
         name: user.name,
         email: user.email,
         role: user.role,
@@ -81,6 +84,7 @@ router.post(
 // Get current user
 router.get(
   '/me',
+  authMiddleware,
   asyncHandler(async (req, res) => {
     const user = await User.findById(req.user.id).populate('assignedTasks assignedProjects');
     res.status(200).json({ user });

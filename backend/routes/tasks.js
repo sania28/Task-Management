@@ -94,7 +94,9 @@ router.get(
       return res.status(404).json({ error: 'Task not found' });
     }
 
-    const isOwner = task.creator._id.toString() === req.user.id || task.assignee?._id.toString() === req.user.id;
+    const creatorId = task.creator?._id ? task.creator._id.toString() : task.creator?.toString();
+    const assigneeId = task.assignee?._id ? task.assignee._id.toString() : task.assignee?.toString();
+    const isOwner = creatorId === req.user.id || assigneeId === req.user.id;
     if (!isOwner) {
       return res.status(403).json({ error: 'Not authorized' });
     }
@@ -108,7 +110,6 @@ router.put(
   '/:id',
   asyncHandler(async (req, res) => {
     const { title, description, status, priority, dueDate, assigneeId, completionPercentage } = req.body;
-    const allowedFields = ['title', 'description', 'status', 'priority', 'dueDate', 'assignee', 'completionPercentage'];
 
     const updateData = {};
     if (title) updateData.title = title.trim();
@@ -124,7 +125,8 @@ router.put(
       return res.status(404).json({ error: 'Task not found' });
     }
 
-    if (task.creator.toString() !== req.user.id) {
+    const creatorId = task.creator?._id ? task.creator._id.toString() : task.creator?.toString();
+    if (creatorId !== req.user.id) {
       return res.status(403).json({ error: 'Not authorized' });
     }
 
@@ -160,7 +162,8 @@ router.delete(
       return res.status(404).json({ error: 'Task not found' });
     }
 
-    if (task.creator.toString() !== req.user.id) {
+    const creatorId = task.creator?._id ? task.creator._id.toString() : task.creator?.toString();
+    if (creatorId !== req.user.id) {
       return res.status(403).json({ error: 'Not authorized' });
     }
 

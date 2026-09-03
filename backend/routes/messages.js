@@ -97,22 +97,4 @@ router.post(
   })
 );
 
-// Mark messages as read
-router.put(
-  '/:messageId/read',
-  asyncHandler(async (req, res) => {
-    const message = await Message.findByIdAndUpdate(
-      req.params.messageId,
-      { isRead: true, readAt: new Date() },
-      { new: true }
-    );
-
-    if (!message) {
-      return res.status(404).json({ error: 'Message not found' });
-    }
-
-    res.status(200).json({ message });
-  })
-);
-
 export default router;
