@@ -64,44 +64,27 @@ npm run build
 
 ---
 
-## Render Deployment Instructions
+## Render Deployment Options
 
-To deploy the application so that the React frontend UI is publicly accessible and communicates with the Node/Express backend:
+### Deployment Strategy Overview
 
-### 1. Deploy Backend Web Service on Render
+The application supports two Render deployment configurations:
 
-1. Log into [Render Dashboard](https://dashboard.render.com/) and click **New +** > **Web Service**.
-2. Connect your Git repository (`sania28/Task-Management`).
-3. Configure the backend settings:
-   - **Name**: `task-manager-backend`
-   - **Root Directory**: `backend`
-   - **Environment**: `Node`
-   - **Build Command**: `npm install`
+1. **Option 1: Single Full-Stack Web Service (Simplest)**:
+   - Deploy a single Node Web Service on Render with **Root Directory**: `backend`.
+   - **Build Command**: `npm install && npm run build` (This runs `cd ../frontend && npm install && npm run build` to build the React static bundle).
    - **Start Command**: `npm start`
-4. Add Environment Variables in Render Backend Settings:
-   - `MONGODB_URI`: Your MongoDB Atlas connection URI (e.g. `mongodb+srv://<user>:<password>@cluster.mongodb.net/task-manager`)
-   - `JWT_SECRET`: A secure random secret string
-   - `JWT_EXPIRE`: `7d`
-   - `NODE_ENV`: `production`
-   - `CORS_ORIGIN`: Your deployed frontend Render URL (e.g. `https://task-manager-frontend.onrender.com`)
-5. Deploy the backend service and copy its public URL (e.g. `https://task-manager-backend.onrender.com`).
+   - Express serves the React UI statically from `../frontend/dist` and handles SPA routing fallback for requests to `/`, `/dashboard`, `/tasks`, `/projects`, etc.
 
-### 2. Deploy Frontend Static Site on Render (Public UI)
-
-1. In Render Dashboard, click **New +** > **Static Site**.
-2. Connect your Git repository (`sania28/Task-Management`).
-3. Configure the frontend settings:
-   - **Name**: `task-manager-frontend`
-   - **Root Directory**: `frontend`
-   - **Build Command**: `npm install && npm run build`
-   - **Publish Directory**: `dist`
-4. Add Environment Variables in Render Frontend Settings:
-   - `VITE_API_URL`: Your backend service URL with `/api` (e.g. `https://task-manager-backend.onrender.com/api`)
-5. Configure Redirects / Rewrites rule under Static Site settings for React Router:
-   - **Source**: `/*`
-   - **Destination**: `/index.html`
-   - **Action**: `Rewrite`
-6. Deploy the static site and access your public React Task Management UI URL.
+2. **Option 2: Separate Web Service (Backend) + Static Site (Frontend)**:
+   - **Backend Web Service**: Root Directory `backend`, Build Command `npm install`, Start Command `npm start`.
+   - **Frontend Static Site**:
+     - **Repository**: `sania28/Task-Management`
+     - **Root Directory**: `frontend`
+     - **Build Command**: `npm install && npm run build`
+     - **Publish Directory**: `dist`
+     - **Environment Variable**: `VITE_API_URL=https://<your-backend-service>.onrender.com/api`
+     - **Redirects / Rewrites**: Source `/*`, Destination `/index.html`, Action `Rewrite`.
 
 ---
 

@@ -2,9 +2,16 @@ import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import morgan from 'morgan';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 import connectDB from './config/database.js';
 import errorHandler from './middleware/errorHandler.js';
 import { apiLimiter } from './config/rateLimiter.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const frontendDistPath = path.resolve(__dirname, '../frontend/dist');
 
 // Load environment variables
 dotenv.config();
@@ -64,7 +71,22 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/teams', teamRoutes);
 
-// 404 handler
+// Serve static frontend assets if built
+if (fs.existsSync(frontendDistPath)) {
+  app.use(express.static(frontendDistPath));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api')) {
+      return next();
+    }
+    res.sendFile(path.join(frontendDistPath, 'index.html'));
+  });
+}
+
+// 404 handler for unmatched API requests
+app.use('/api', (req, res) => {
+  res.status(404).json({ error: 'API route not found' });
+});
+
 app.use((req, res) => {
   res.status(404).json({ error: 'Not found' });
 });
