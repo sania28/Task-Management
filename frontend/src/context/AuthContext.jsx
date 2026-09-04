@@ -3,8 +3,11 @@ import axios from 'axios';
 
 const AuthContext = createContext();
 
+const rawApiUrl = (import.meta.env.VITE_API_URL || '/api').trim().replace(/\/+$/, '');
+const baseURL = rawApiUrl.endsWith('/api') ? rawApiUrl : `${rawApiUrl}/api`;
+
 const API = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '/api',
+  baseURL,
 });
 
 export const AuthProvider = ({ children }) => {
