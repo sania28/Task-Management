@@ -64,27 +64,32 @@ npm run build
 
 ---
 
-## Render Deployment Options
+## Render Deployment Guide
 
-### Deployment Strategy Overview
+To deploy the Task Management frontend as a dedicated public web UI on Render while connected to your Express API backend:
 
-The application supports two Render deployment configurations:
+### Render Static Site Settings (Frontend UI)
 
-1. **Option 1: Single Full-Stack Web Service (Simplest)**:
-   - Deploy a single Node Web Service on Render with **Root Directory**: `backend`.
-   - **Build Command**: `npm install && npm run build` (This runs `cd ../frontend && npm install && npm run build` to build the React static bundle).
-   - **Start Command**: `npm start`
-   - Express serves the React UI statically from `../frontend/dist` and handles SPA routing fallback for requests to `/`, `/dashboard`, `/tasks`, `/projects`, etc.
+1. Go to [Render Dashboard](https://dashboard.render.com/) and click **New +** > **Static Site**.
+2. Connect your GitHub repository (`sania28/Task-Management`).
+3. Enter the exact settings below:
 
-2. **Option 2: Separate Web Service (Backend) + Static Site (Frontend)**:
-   - **Backend Web Service**: Root Directory `backend`, Build Command `npm install`, Start Command `npm start`.
-   - **Frontend Static Site**:
-     - **Repository**: `sania28/Task-Management`
-     - **Root Directory**: `frontend`
-     - **Build Command**: `npm install && npm run build`
-     - **Publish Directory**: `dist`
-     - **Environment Variable**: `VITE_API_URL=https://<your-backend-service>.onrender.com/api`
-     - **Redirects / Rewrites**: Source `/*`, Destination `/index.html`, Action `Rewrite`.
+| Setting | Value |
+|---|---|
+| **Repository** | `sania28/Task-Management` |
+| **Root Directory** | `frontend` |
+| **Build Command** | `npm install && npm run build` |
+| **Publish Directory** | `dist` |
+
+4. Add Environment Variable under **Environment**:
+   - `VITE_API_URL`: `<your-backend-api-url>/api` (e.g., `https://task-management-my5w.onrender.com/api`)
+
+5. Add Redirects / Rewrites rule (under **Redirects/Rewrites** settings) to enable React Router direct links & page refresh:
+   - **Source**: `/*`
+   - **Destination**: `/index.html`
+   - **Action**: `Rewrite`
+
+6. Click **Create Static Site**. Render will deploy your frontend UI and assign a public URL (e.g. `https://task-management-frontend.onrender.com`).
 
 ---
 
